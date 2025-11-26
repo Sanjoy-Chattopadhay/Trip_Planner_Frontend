@@ -9,7 +9,9 @@ export default function ProfileModal({
   onChange,
   onSubmit,
   onEdit,
-  onClose
+  onClose,
+  openLocationPicker,
+  useMyLocation
 }) {
   return (
     <div className="modal-overlay">
@@ -72,6 +74,10 @@ export default function ProfileModal({
               <div className="info-item">
                 <span className="info-label">Graduation Year</span>
                 <span className="info-value">{profileForm.graduationYear || 'Not set'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Location</span>
+                <span className="info-value">{profileForm.location || 'Not set'}</span>
               </div>
               {profileForm.bio && (
                 <div className="info-item bio-item">
@@ -173,6 +179,22 @@ export default function ProfileModal({
                   value={profileForm.graduationYear}
                   onChange={onChange}
                 />
+              </div>
+
+              <div className="form-group full-width">
+                <label htmlFor="location">Location</label>
+                <input
+                  id="location"
+                  name="location"
+                  type="text"
+                  placeholder="Pick location on map"
+                  value={profileForm.location}
+                  readOnly
+                />
+                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                  <button type="button" onClick={openLocationPicker}>Pick on Map</button>
+                  <button type="button" onClick={useMyLocation}>Use My Location</button>
+                </div>
               </div>
 
               <div className="form-group full-width">
