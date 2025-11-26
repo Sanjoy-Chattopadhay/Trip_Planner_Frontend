@@ -29,7 +29,7 @@ export default function Dashboard() {
     femaleCount: 0
   });
   
-  // Profile form state
+  // Profile form state (add location)
   const [profileForm, setProfileForm] = useState({
     age: '',
     gender: '',
@@ -37,8 +37,13 @@ export default function Dashboard() {
     college: '',
     course: '',
     graduationYear: '',
+    location: '',
     bio: ''
   });
+
+  // Location picker states
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  // Removed unused states: mapsLoaded, selectedLatLng
 
   // Fetch data on mount
   useEffect(() => {
@@ -76,6 +81,7 @@ export default function Dashboard() {
           college: res.data.college || '',
           course: res.data.course || '',
           graduationYear: res.data.graduationYear || '',
+          location: res.data.location || '',
           bio: res.data.bio || ''
         });
       })
@@ -133,7 +139,7 @@ export default function Dashboard() {
         fetchTrips();
         resetTripForm();
       })
-      .catch(err => alert('Error saving trip'));
+      .catch(() => alert('Error saving trip'));
   };
 
   const handleEditTrip = trip => {
@@ -160,6 +166,105 @@ export default function Dashboard() {
         alert('Profile updated successfully!');
       })
       .catch(() => alert('Failed to update profile'));
+  };
+
+  // Google Maps logic
+  const loadGoogleMapsScript = () => {
+    return new Promise((resolve, reject) => {
+      if (typeof window.google === 'object' && typeof window.google.maps === 'object') {
+        return resolve(window.google);
+      }
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+      if (!apiKey) {
+        return reject(new Error('Google Maps API key not found. Set VITE_GOOGLE_MAPS_API_KEY in .env'));
+      }
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        resolve(window.google);
+      };
+      script.onerror = (err) => reject(err);
+      document.head.appendChild(script);
+    });
+  };
+
+  // Open map picker modal and init map
+  const openLocationPicker = async () => {
+    try {
+      await loadGoogleMapsScript();
+      setShowLocationPicker(true);
+      setTimeout(() => {
+        if (window.google && document.getElementById('profile-map')) {
+          const map = new window.google.maps.Map(document.getElementById('profile-map'), {
+            center: { lat: 22.5600, lng: 88.3700 },
+            zoom: 6
+          });
+          const geocoder = new window.google.maps.Geocoder();
+          let marker = null;
+          map.addListener('click', (e) => {
+            const latlng = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+            if (marker) marker.setMap(null);
+            marker = new window.google.maps.Marker({ position: latlng, map });
+            // Removed setSelectedLatLng
+            geocoder.geocode({ location: latlng }, (results, status) => {
+              if (status === 'OK' && results[0]) {
+                setProfileForm(f => ({ ...f, location: results[0].formatted_address }));
+              }
+            });
+          });
+          // If a location already selected, place marker
+          if (profileForm.location) {
+            geocoder.geocode({ address: profileForm.location }, (results, status) => {
+              if (status === 'OK' && results[0]) {
+                map.setCenter(results[0].geometry.location);
+                map.setZoom(12);
+                marker = new window.google.maps.Marker({ position: results[0].geometry.location, map });
+                // Removed setSelectedLatLng
+              }
+            });
+          }
+        }
+      }, 200);
+    } catch (err) {
+      console.error('Failed to load Google Maps', err);
+      alert('Failed to load Google Maps. Make sure VITE_GOOGLE_MAPS_API_KEY is set.');
+    }
+  };
+
+  const closeLocationPicker = () => {
+    setShowLocationPicker(false);
+  };
+
+  // Use device geolocation and reverse geocode
+  const useMyLocation = async () => {
+    try {
+      await loadGoogleMapsScript();
+      if (!navigator.geolocation) {
+        alert('Geolocation not supported by your browser');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: latlng }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            setProfileForm(f => ({ ...f, location: results[0].formatted_address }));
+            // Removed setSelectedLatLng
+            alert('Location set to: ' + results[0].formatted_address);
+          } else {
+            alert('Could not determine address for your location');
+          }
+        });
+      }, (err) => {
+        console.error(err);
+        alert('Unable to retrieve your location');
+      });
+    } catch (err) {
+      console.error(err);
+      alert('Failed to load Google Maps API. Add VITE_GOOGLE_MAPS_API_KEY in .env');
+    }
   };
 
   const resetTripForm = () => {
@@ -235,7 +340,24 @@ export default function Dashboard() {
               setShowProfileModal(false);
               setIsEditingProfile(false);
             }}
+            openLocationPicker={openLocationPicker}
+            useMyLocation={useMyLocation}
           />
+        )}
+
+        {/* Location Picker Modal */}
+        {showLocationPicker && (
+          <div className="modal-overlay">
+            <div className="modal-content profile-modal-content">
+              <h2>Select Location</h2>
+              <div id="profile-map" style={{ width: '100%', height: '400px', marginBottom: '12px' }} />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" onClick={closeLocationPicker}>Set Location</button>
+                <button type="button" onClick={() => { setProfileForm(f => ({ ...f, location: '' })); closeLocationPicker(); }}>Clear</button>
+                <button type="button" onClick={closeLocationPicker}>Cancel</button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
