@@ -6,11 +6,16 @@ import TripFormModal from './TripFormModal';
 import ProfileModal from './ProfileModal';
 import "../styles/Dashboard.css";
 
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trips, setTrips] = useState([]);
+  
+  // Tab state - NEW
+  const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming', 'past', 'requests'
+  const [pendingRequests, setPendingRequests] = useState([]);
   
   // Modal states
   const [showTripForm, setShowTripForm] = useState(false);
@@ -29,7 +34,7 @@ export default function Dashboard() {
     femaleCount: 0
   });
   
-  // Profile form state (add location)
+  // Profile form state
   const [profileForm, setProfileForm] = useState({
     age: '',
     gender: '',
@@ -43,14 +48,23 @@ export default function Dashboard() {
 
   // Location picker states
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  // Removed unused states: mapsLoaded, selectedLatLng
 
-  // Fetch data on mount
+  // Fetch data on mount and when tab changes - UPDATED
   useEffect(() => {
     fetchUserData();
-    fetchTrips();
     fetchProfile();
   }, []);
+
+  // Fetch data based on active tab - NEW
+  useEffect(() => {
+    if (activeTab === 'upcoming') {
+      fetchUpcomingTrips();
+    } else if (activeTab === 'past') {
+      fetchPastTrips();
+    } else if (activeTab === 'requests') {
+      fetchPendingRequests();
+    }
+  }, [activeTab]);
 
   const fetchUserData = () => {
     axios.get('http://localhost:8080/api/user', { withCredentials: true })
@@ -64,6 +78,28 @@ export default function Dashboard() {
       });
   };
 
+  // NEW - Fetch upcoming trips
+  const fetchUpcomingTrips = () => {
+    axios.get('http://localhost:8080/api/trips/upcoming', { withCredentials: true })
+      .then(res => setTrips(res.data))
+      .catch(err => console.error('Error fetching upcoming trips:', err));
+  };
+
+  // NEW - Fetch past trips
+  const fetchPastTrips = () => {
+    axios.get('http://localhost:8080/api/trips/past', { withCredentials: true })
+      .then(res => setTrips(res.data))
+      .catch(err => console.error('Error fetching past trips:', err));
+  };
+
+  // NEW - Fetch pending requests
+  const fetchPendingRequests = () => {
+    axios.get('http://localhost:8080/api/trips/requests/pending', { withCredentials: true })
+      .then(res => setPendingRequests(res.data))
+      .catch(err => console.error('Error fetching requests:', err));
+  };
+
+  // DEPRECATED - Keep for backward compatibility with "My Trips"
   const fetchTrips = () => {
     axios.get('http://localhost:8080/api/trips/my', { withCredentials: true })
       .then(res => setTrips(res.data))
@@ -136,7 +172,9 @@ export default function Dashboard() {
       .then(() => {
         setShowTripForm(false);
         setEditTripId(null);
-        fetchTrips();
+        // Refresh current tab data
+        if (activeTab === 'upcoming') fetchUpcomingTrips();
+        else if (activeTab === 'past') fetchPastTrips();
         resetTripForm();
       })
       .catch(() => alert('Error saving trip'));
@@ -154,6 +192,49 @@ export default function Dashboard() {
       femaleCount: trip.femaleCount || 0
     });
     setShowTripForm(true);
+  };
+
+  // NEW - Handle join request
+  const handleRequestToJoin = (tripId) => {
+    axios.post(`http://localhost:8080/api/trips/${tripId}/request`, {}, { withCredentials: true })
+      .then(() => {
+        alert('Request sent successfully!');
+        fetchUpcomingTrips(); // Refresh to update button state
+      })
+      .catch(err => {
+        const message = err.response?.data?.message || 'Error sending request';
+        alert(message);
+      });
+  };
+
+  // NEW - Approve request
+  const handleApproveRequest = (requestId) => {
+    if (!window.confirm('Are you sure you want to approve this request?')) return;
+    
+    axios.post(`http://localhost:8080/api/trips/requests/${requestId}/approve`, {}, { withCredentials: true })
+      .then(() => {
+        alert('Request approved successfully!');
+        fetchPendingRequests();
+      })
+      .catch(err => {
+        const message = err.response?.data?.message || 'Error approving request';
+        alert(message);
+      });
+  };
+
+  // NEW - Deny request
+  const handleDenyRequest = (requestId) => {
+    if (!window.confirm('Are you sure you want to deny this request?')) return;
+    
+    axios.post(`http://localhost:8080/api/trips/requests/${requestId}/deny`, {}, { withCredentials: true })
+      .then(() => {
+        alert('Request denied successfully!');
+        fetchPendingRequests();
+      })
+      .catch(err => {
+        const message = err.response?.data?.message || 'Error denying request';
+        alert(message);
+      });
   };
 
   const handleProfileSubmit = e => {
@@ -190,7 +271,6 @@ export default function Dashboard() {
     });
   };
 
-  // Open map picker modal and init map
   const openLocationPicker = async () => {
     try {
       await loadGoogleMapsScript();
@@ -207,21 +287,18 @@ export default function Dashboard() {
             const latlng = { lat: e.latLng.lat(), lng: e.latLng.lng() };
             if (marker) marker.setMap(null);
             marker = new window.google.maps.Marker({ position: latlng, map });
-            // Removed setSelectedLatLng
             geocoder.geocode({ location: latlng }, (results, status) => {
               if (status === 'OK' && results[0]) {
                 setProfileForm(f => ({ ...f, location: results[0].formatted_address }));
               }
             });
           });
-          // If a location already selected, place marker
           if (profileForm.location) {
             geocoder.geocode({ address: profileForm.location }, (results, status) => {
               if (status === 'OK' && results[0]) {
                 map.setCenter(results[0].geometry.location);
                 map.setZoom(12);
                 marker = new window.google.maps.Marker({ position: results[0].geometry.location, map });
-                // Removed setSelectedLatLng
               }
             });
           }
@@ -237,7 +314,6 @@ export default function Dashboard() {
     setShowLocationPicker(false);
   };
 
-  // Use device geolocation and reverse geocode
   const useMyLocation = async () => {
     try {
       await loadGoogleMapsScript();
@@ -251,7 +327,6 @@ export default function Dashboard() {
         geocoder.geocode({ location: latlng }, (results, status) => {
           if (status === 'OK' && results[0]) {
             setProfileForm(f => ({ ...f, location: results[0].formatted_address }));
-            // Removed setSelectedLatLng
             alert('Location set to: ' + results[0].formatted_address);
           } else {
             alert('Could not determine address for your location');
@@ -310,7 +385,86 @@ export default function Dashboard() {
           ✈️ Create New Trip
         </button>
 
-        <TripList trips={trips} onEdit={handleEditTrip} />
+        {/* NEW - Tab Navigation */}
+        <div className="tabs-container">
+          <button 
+            className={`tab-btn ${activeTab === 'upcoming' ? 'active' : ''}`}
+            onClick={() => setActiveTab('upcoming')}
+          >
+            🌍 Upcoming Trips
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'past' ? 'active' : ''}`}
+            onClick={() => setActiveTab('past')}
+          >
+            📅 My Past Trips
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'requests' ? 'active' : ''}`}
+            onClick={() => setActiveTab('requests')}
+          >
+            📬 Pending Requests
+            {pendingRequests.length > 0 && (
+              <span className="badge">{pendingRequests.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* NEW - Conditional Content Based on Active Tab */}
+        {activeTab === 'requests' ? (
+          <div className="requests-container">
+            {pendingRequests.length === 0 ? (
+              <div className="empty-state">
+                <p>No pending requests</p>
+              </div>
+            ) : (
+              pendingRequests.map(req => (
+                <div key={req.id} className="request-card">
+                  <div className="request-header">
+                    <img 
+                      src={req.userPicture || 'https://via.placeholder.com/50'} 
+                      alt={req.userName}
+                      className="request-avatar"
+                    />
+                    <div className="request-info">
+                      <h3>{req.userName}</h3>
+                      <p className="request-email">{req.userEmail}</p>
+                    </div>
+                  </div>
+                  <div className="request-trip-info">
+                    <p><strong>Trip:</strong> {req.destination}</p>
+                    <p><strong>Dates:</strong> {new Date(req.startDate).toLocaleDateString()} - {new Date(req.endDate).toLocaleDateString()}</p>
+                    <p className="request-time">
+                      Requested: {new Date(req.requestedAt).toLocaleDateString()} at {new Date(req.requestedAt).toLocaleTimeString()}
+                    </p>
+                  </div>
+                  <div className="request-actions">
+                    <button 
+                      className="approve-btn"
+                      onClick={() => handleApproveRequest(req.id)}
+                    >
+                      ✅ Approve
+                    </button>
+                    <button 
+                      className="deny-btn"
+                      onClick={() => handleDenyRequest(req.id)}
+                    >
+                      ❌ Deny
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <TripList 
+            trips={trips} 
+            onEdit={handleEditTrip}
+            onRequestJoin={handleRequestToJoin}
+            currentUserId={user?.id}
+            showJoinButton={activeTab === 'upcoming'}
+          />
+        )}
 
         {showTripForm && (
           <TripFormModal

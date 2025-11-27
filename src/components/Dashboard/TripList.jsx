@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import "../styles/TripList.css";
 
-export default function TripList({ trips, onEdit }) {
+export default function TripList({ trips, onEdit, onRequestJoin, currentUserId, showJoinButton }) {
   const navigate = useNavigate();
 
   const calculateDays = (startDate, endDate) => {
@@ -22,59 +22,92 @@ export default function TripList({ trips, onEdit }) {
     return baseClass;
   };
 
+  const isCreator = (trip) => {
+    return trip.creator && trip.creator.id === currentUserId;
+  };
+
   return (
-    <div className="trip-list-container">
+    <div className="trip-list">
       {trips.length === 0 ? (
         <div className="empty-state">
-          <p className="empty-icon">✈️</p>
-          <h3>No trips yet</h3>
+          <div className="empty-icon">✈️</div>
           <p>Create your first trip to get started!</p>
         </div>
       ) : (
-        <ul className="trip-list">
-          {trips.map(trip => (
-            <li key={trip.id} className="trip-card">
-              <div className="trip-header">
-                <h3 className="trip-destination">{trip.destination}</h3>
-                <span className={getStatusClass(trip.status)}>{trip.status}</span>
+        trips.map((trip) => (
+          <div key={trip.id} className="trip-card">
+            <div className="trip-header">
+              <h3>{trip.destination}</h3>
+              {trip.status && (
+                <span className={getStatusClass(trip.status)}>
+                  {trip.status}
+                </span>
+              )}
+            </div>
+
+            <div className="trip-details">
+              <div className="detail-row">
+                <span className="label">📅 Dates:</span>
+                <span>
+                  {new Date(trip.startDate).toLocaleDateString()} - 
+                  {new Date(trip.endDate).toLocaleDateString()}
+                  <span className="days-badge">
+                    {calculateDays(trip.startDate, trip.endDate)} days
+                  </span>
+                </span>
               </div>
 
-              <div className="trip-details">
-                <div className="detail-row">
-                  <span className="detail-icon">💰</span>
-                  <span className="detail-text">₹{trip.budget}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-icon">📅</span>
-                  <span className="detail-text">
-                    {trip.startDate} to {trip.endDate} ({calculateDays(trip.startDate, trip.endDate)} days)
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-icon">👥</span>
-                  <span className="detail-text">
-                    {trip.maleCount} Male{trip.maleCount !== 1 ? 's' : ''}, {trip.femaleCount} Female{trip.femaleCount !== 1 ? 's' : ''}
-                  </span>
-                </div>
+              <div className="detail-row">
+                <span className="label">💰 Budget:</span>
+                <span>₹{trip.budget}</span>
               </div>
 
-              <div className="trip-actions">
-                <button 
-                  className="btn-edit"
+              <div className="detail-row">
+                <span className="label">👥 Group:</span>
+                <span>
+                  {trip.maleCount} Male{trip.maleCount !== 1 ? 's' : ''}, 
+                  {trip.femaleCount} Female{trip.femaleCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {trip.creator && (
+                <div className="detail-row">
+                  <span className="label">👤 Created by:</span>
+                  <span>{trip.creator.name}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="trip-actions">
+              <button
+                className="view-btn"
+                onClick={() => navigate(`/trip/${trip.id}`)}
+              >
+                View Details
+              </button>
+
+              {/* Show Edit button only for creator */}
+              {isCreator(trip) && (
+                <button
+                  className="edit-btn"
                   onClick={() => onEdit(trip)}
                 >
-                  Edit
+                  Edit Trip
                 </button>
+              )}
+
+              {/* Show Request to Join button for non-creators in upcoming trips */}
+              {showJoinButton && !isCreator(trip) && onRequestJoin && (
                 <button
-                  className="btn-view-details"
-                  onClick={() => navigate(`/trip/${trip.id}`)}
+                  className="join-btn"
+                  onClick={() => onRequestJoin(trip.id)}
                 >
-                  View Details & Itinerary
+                  Request to Join
                 </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+              )}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );
